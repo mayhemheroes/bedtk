@@ -1,0 +1,6 @@
+project: rnshah9/mayhem-bedtk
+target: bedtk
+
+cmds:
+  - cmd: /repo/bedtk sort @@
+    filepath: /test.bed.gz
