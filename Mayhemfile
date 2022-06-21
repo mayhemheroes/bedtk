@@ -1,6 +1,9 @@
 project: bedtk
 target: bedtk
+testsuite:
+  - file://test/test-iso.bed.gz
 
 cmds:
   - cmd: /repo/bedtk sort /test.bed.gz
     filepath: /test.bed.gz
+    max_length: 55000
