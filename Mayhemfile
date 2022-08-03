@@ -4,6 +4,5 @@ testsuite:
   - file://test/test-iso.bed.gz
 
 cmds:
-  - cmd: /repo/bedtk sort /test.bed.gz
-    filepath: /test.bed.gz
+  - cmd: /bedtk sort @@
     max_length: 55000
