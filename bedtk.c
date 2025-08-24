@@ -8,7 +8,7 @@
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 0x10000)
 
-#define BEDTK_VERSION "1.1-r33"
+#define BEDTK_VERSION "1.2-r34"
 
 /*****************
  * Faster printf *
@@ -101,20 +101,23 @@ static char *parse_vcf(char *s, int32_t *st_, int32_t *en_, char **r) // r point
 			if (i == 0) {
 				ctg = p;
 				*r = q + 1;
-			} else if (i == 1) st = atol(p) - 1;
-			else if (i == 3) en = st + (q - p);
-			else if (i == 7) {
+			} else if (i == 1) {
+				st = atol(p) - 1;
+			} else if (i == 3) {
+				en = st + (q - p);
+			} else if (i == 7) {
 				char *s = 0;
-				if (strncmp(p, "END=", 4) == 0) s = p + 1;
-				else {
+				if (strncmp(p, "END=", 4) == 0) {
+					s = p + 4;
+				} else {
 					s = strstr(p, ";END=");
 					if (s) s += 5;
 				}
-				en = strtol(s, &s, 10);
+				if (s) en = strtol(s, &s, 10);
 			}
 			if (i != 0) *q = c;
 			++i, p = q + 1;
-			if (i == 7 || c == '\0') break;
+			if (i == 8 || c == '\0') break;
 		}
 	}
 	*st_ = st, *en_ = en;
