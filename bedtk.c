@@ -8,7 +8,7 @@
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 0x10000)
 
-#define BEDTK_VERSION "1.0-r32-dirty"
+#define BEDTK_VERSION "1.1-r33"
 
 /*****************
  * Faster printf *
@@ -300,32 +300,54 @@ int main_isec(int argc, char *argv[])
 	return 0;
 }
 
+static int64_t cal_cov(const cgranges_t *cr, int64_t n_b, const int64_t *b, int64_t st1, int64_t en1, int64_t *cnt_, int64_t *depth_)
+{
+	int64_t j, cnt = 0, cov = 0, cov_st = 0, cov_en = 0, depth = 0;
+	for (j = 0; j < n_b; ++j) {
+		cr_intv_t *r = &cr->r[b[j]];
+		int32_t st0 = cr_st(r), en0 = cr_en(r);
+		if (st0 < st1) st0 = st1;
+		if (en0 > en1) en0 = en1;
+		if (st0 > cov_en) {
+			cov += cov_en - cov_st;
+			cov_st = st0, cov_en = en0;
+		} else cov_en = cov_en > en0? cov_en : en0;
+		++cnt, depth += en0 - st0;
+	}
+	cov += cov_en - cov_st;
+	*cnt_ = cnt, *depth_ = depth;
+	return cov;
+}
+
 int main_flt(int argc, char *argv[])
 {
 	cgranges_t *cr;
 	ketopt_t o = KETOPT_INIT;
 	int64_t m_b = 0, *b = 0, n_b;
 	int c, win = 0, vcf_in = 0, paf_in = 0, test_con = 0, non_sat = 0;
+	double min_frac = 0.0;
 	gzFile fp;
 	kstream_t *ks;
 	kstring_t str = {0,0,0}, out = {0,0,0};
 
-	while ((c = ketopt(&o, argc, argv, 1, "cw:Cvp", 0)) >= 0) {
+	while ((c = ketopt(&o, argc, argv, 1, "cw:Cvpf:", 0)) >= 0) {
 		if (c == 'c') vcf_in = 1;
 		else if (c == 'p') paf_in = 1;
 		else if (c == 'C') test_con = 1;
 		else if (c == 'v') non_sat = 1;
 		else if (c == 'w') win = atol(o.arg);
+		else if (c == 'f') min_frac = atof(o.arg);
 	}
 
 	if (argc - o.ind < 1 || (argc - o.ind < 2 && isatty(0))) {
 		printf("Usage: bedtk flt [options] <loaded.bed> <streamed.bed>\n");
 		printf("Options:\n");
-		printf("  -c      the second input is VCF\n");
-		printf("  -p      the second input is PAF\n");
-		printf("  -C      print records contained in the union of <loaded.bed>\n");
-		printf("  -v      print non-satisfying records\n");
-		printf("  -w INT  window size [0]\n");
+		printf("  -c        the second input is VCF\n");
+		printf("  -p        the second input is PAF\n");
+		printf("  -C        print records contained in the union of <loaded.bed>\n");
+		printf("  -v        print non-satisfying records\n");
+		printf("  -w INT    window size [0]\n");
+		printf("  -f FLOAT  min overlap fraction [%g]\n", min_frac);
 		return 1;
 	}
 
@@ -364,6 +386,10 @@ int main_flt(int argc, char *argv[])
 					break;
 				}
 			}
+		} else if (min_frac > 0.0) {
+			int64_t cov, cnt, depth;
+			cov = cal_cov(cr, n_b, b, st1, en1, &cnt, &depth);
+			sat = (cov >= (en1 - st1) * min_frac);
 		} else sat = (n_b > 0);
 		out.l = 0;
 		if ((sat && !non_sat) || (!sat && non_sat)) {
@@ -426,7 +452,7 @@ int main_cov(int argc, char *argv[])
 	while (ks_getuntil(ks, KS_SEP_LINE, &str, 0) >= 0) {
 		int32_t st1, en1;
 		char *ctg;
-		int64_t j, cnt = 0, cov = 0, cov_st = 0, cov_en = 0, depth = 0;
+		int64_t cnt = 0, cov = 0, depth = 0;
 		ctg = parse_bed3(str.s, &st1, &en1);
 		if (ctg == 0) continue;
 		if (contained)
@@ -435,18 +461,7 @@ int main_cov(int argc, char *argv[])
 			n_b = cr_overlap(cr, ctg, st1, en1, &b, &m_b);
 		out.l = 0;
 		if (!cnt_only) {
-			for (j = 0; j < n_b; ++j) {
-				cr_intv_t *r = &cr->r[b[j]];
-				int32_t st0 = cr_st(r), en0 = cr_en(r);
-				if (st0 < st1) st0 = st1;
-				if (en0 > en1) en0 = en1;
-				if (st0 > cov_en) {
-					cov += cov_en - cov_st;
-					cov_st = st0, cov_en = en0;
-				} else cov_en = cov_en > en0? cov_en : en0;
-				++cnt, depth += en0 - st0;
-			}
-			cov += cov_en - cov_st;
+			cov = cal_cov(cr, n_b, b, st1, en1, &cnt, &depth);
 			if (print_depth)
 				mm_sprintf_lite(&out, "%s\t%d\t%d\t%d\t%d\t%d\n", ctg, st1, en1, (int)cnt, (int)cov, (int)depth);
 			else
